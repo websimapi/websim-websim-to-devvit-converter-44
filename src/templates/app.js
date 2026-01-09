@@ -2,7 +2,6 @@ export const getMainTs = (title) => {
     const safeTitle = title.replace(/'/g, "\\'");
     return `
 import express from 'express';
-import { Buffer } from 'node:buffer';
 import { Devvit } from '@devvit/public-api';
 import { 
     createServer, 
@@ -65,11 +64,12 @@ async function fetchAllData() {
             // Always try to fetch rich profile for snoovatar (Server Source of Truth)
             const currUser = await reddit.getCurrentUser();
             if (currUser) {
-                // We use the proxy path to ensure the client treats the avatar as same-origin (fixes WebGL CORS)
+                const snoovatarUrl = await currUser.getSnoovatarUrl();
                 user = {
                     id: currUser.id,
                     username: currUser.username,
-                    avatar_url: \`/api/proxy/avatar/\${currUser.username}\`
+                    // Use Snoovatar if available, else fallback to standard Reddit static default
+                    avatar_url: snoovatarUrl ?? 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png'
                 };
             }
         } catch(e) { 
@@ -193,40 +193,20 @@ router.get('/api/v1/search/assets/relevant', async (req, res) => {
     }
 });
 
-// --- Avatar Proxy Route (Streaming for CORS) ---
+// --- Avatar Proxy Route (Legacy/Fallback) ---
 router.get('/api/proxy/avatar/:username', async (req, res) => {
     const { username } = req.params;
-    const DEFAULT_AVATAR = 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png';
-    
     try {
-        let url = DEFAULT_AVATAR;
-        
-        // 1. Resolve URL
-        if (username !== 'guest' && username !== 'Guest') {
-            try {
-                const user = await reddit.getUserByUsername(username);
-                if (user) {
-                    const snoo = await user.getSnoovatarUrl();
-                    if (snoo) url = snoo;
-                }
-            } catch(e) { /* user lookup failed, use default */ }
+        // Attempt to get the latest Snoovatar from Reddit
+        const user = await reddit.getUserByUsername(username);
+        let url = null;
+        if (user) {
+            url = await user.getSnoovatarUrl();
         }
-
-        // 2. Fetch & Stream (Makes it same-origin for the client)
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Failed to fetch upstream avatar');
-        
-        const contentType = response.headers.get('content-type') || 'image/png';
-        const buffer = await response.arrayBuffer();
-        
-        res.set('Content-Type', contentType);
-        res.set('Cache-Control', 'public, max-age=3600');
-        res.send(Buffer.from(buffer));
-
+        res.redirect(url || 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png');
     } catch (e) {
-        console.warn('Avatar Proxy Failed:', e);
-        // Fallback: Redirect (might fail CORS in strict WebGL modes, but better than nothing)
-        res.redirect(DEFAULT_AVATAR);
+        // Fallback silently if user not found or API error
+        res.redirect('https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png');
     }
 });
 

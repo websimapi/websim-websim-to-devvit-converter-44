@@ -1,38 +1,27 @@
 export const websimStubsJs = `
 // [WebSim] API Stubs - Global Script
 (function() {
-    let _currentUser = null;
-
-    // Listen for identity update from Socket Handshake or direct message
-    const updateIdentity = (user) => {
-        _currentUser = user;
-        if (window.WebsimSocket && window.WebsimSocket.updateIdentity) {
-            window.WebsimSocket.updateIdentity(user);
-        }
-    };
-
-    // Also listen to window messages for 'set_user_context' just in case
-    window.addEventListener('message', (e) => {
-        let data = e.data;
-        if (typeof data === 'string') { try { data = JSON.parse(data); } catch(e) {} }
-        if (data && (data.type === 'set_user_context' || (data.payload && data.payload.user))) {
-            const user = data.payload.user || data.payload;
-            updateIdentity(user);
-        }
-    });
+    // Shared state via window._currentUser (managed by socket.js/DevvitBridge)
+    const getSharedUser = () => window._currentUser;
 
     if (!window.websim) {
         window.websim = {
             getCurrentUser: async () => {
-                // Wait for handshake
+                // Wait for handshake (up to 3s)
                 let tries = 0;
-                while(!_currentUser && tries < 20) {
+                while(!getSharedUser() && tries < 30) {
                     await new Promise(r => setTimeout(r, 100));
                     tries++;
                 }
-                return _currentUser || {
+                
+                const u = getSharedUser() || {
                     id: 'guest', username: 'Guest', avatar_url: 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png'
                 };
+                
+                // Polyfill camelCase for consistency (Game ports often expect avatarUrl)
+                if (u.avatar_url && !u.avatarUrl) u.avatarUrl = u.avatar_url;
+                
+                return u;
             },
             getProject: async () => ({ id: 'local', title: 'Reddit Game' }),
             collection: (name) => {

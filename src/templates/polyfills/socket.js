@@ -6,14 +6,10 @@ export const websimSocketPolyfill = `
 
     // Helper: Sanitize Avatar URLs (Fix CSP & Loader Hangs)
     function sanitizeAvatar(url, username) {
-        if (!url) return '';
+        if (!url) return 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png';
         // If it's a WebSim URL, rewrite to local proxy to avoid CSP blocks and 404s
         if (url.includes('images.websim.ai') || url.includes('images.websim.com')) {
             return '/api/proxy/avatar/' + (username || 'guest');
-        }
-        // Force proxy for Reddit URLs too (to handle WebGL CORS issues via same-origin proxy)
-        if (url.includes('reddit.com') || url.includes('redd.it')) {
-             return '/api/proxy/avatar/' + (username || 'guest');
         }
         return url;
     }
@@ -203,7 +199,7 @@ export const websimSocketPolyfill = `
                 const { clientId, payload: presenceData, user } = data;
                 
                 // Update Peers List
-                if (user) {
+                if (user && !this.peers[clientId]) {
                     this.peers[clientId] = {
                         id: clientId,
                         username: user.username,
@@ -272,8 +268,14 @@ export const websimSocketPolyfill = `
         
         static updateIdentity(user) {
             // Ensure we store a safe URL in the shared state
-            if (user && user.avatar_url) {
-                user.avatar_url = sanitizeAvatar(user.avatar_url, user.username);
+            if (user) {
+                if (user.avatar_url) {
+                    user.avatar_url = sanitizeAvatar(user.avatar_url, user.username);
+                }
+                // Polyfill camelCase for consistency with some game ports
+                if (user.avatar_url && !user.avatarUrl) {
+                    user.avatarUrl = user.avatar_url;
+                }
             }
             window._currentUser = user;
             const inst = window.websimSocketInstance;
