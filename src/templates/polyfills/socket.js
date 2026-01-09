@@ -69,6 +69,10 @@ export const websimSocketPolyfill = `
                 
                 // If onConnect isn't triggered immediately or we need to assume connectivity for optimistic UI
                 this.isConnected = true;
+                
+                // CRITICAL FIX: Wait for identity so room.peers is populated before initialize() resolves.
+                // This prevents race conditions where games check room.peers immediately after init.
+                await this._announceJoin();
 
             } catch (e) {
                 console.warn("[WebSim] Realtime init failed:", e);
@@ -78,6 +82,8 @@ export const websimSocketPolyfill = `
                     username: 'Player',
                     avatarUrl: 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png'
                 };
+                // Ensure we still try to announce locally
+                this._announceJoin();
             }
         }
 
