@@ -11,6 +11,10 @@ export const websimSocketPolyfill = `
         if (url.includes('images.websim.ai') || url.includes('images.websim.com')) {
             return '/api/proxy/avatar/' + (username || 'guest');
         }
+        // Force proxy for Reddit URLs too (to handle WebGL CORS issues via same-origin proxy)
+        if (url.includes('reddit.com') || url.includes('redd.it')) {
+             return '/api/proxy/avatar/' + (username || 'guest');
+        }
         return url;
     }
 
@@ -199,7 +203,7 @@ export const websimSocketPolyfill = `
                 const { clientId, payload: presenceData, user } = data;
                 
                 // Update Peers List
-                if (user && !this.peers[clientId]) {
+                if (user) {
                     this.peers[clientId] = {
                         id: clientId,
                         username: user.username,
